@@ -1,0 +1,25 @@
+# 환경변수 파일 (절대 업로드 안됨)
+.env
+.env.local
+.env.production
+.env.development
+
+# 시스템 파일
+.DS_Store
+Thumbs.db
+
+# 에디터 파일
+.vscode/
+.idea/
+
+# 의존성
+node_modules/
+
+# Vercel
+.vercel
+
+# 로그
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
