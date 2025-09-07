@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한국 주식 실시간 데이터</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="max-w-6xl mx-auto">
+        <!-- 헤더 -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h1 class="text-2xl font-bold text-center mb-4">🇰🇷 한국 주식 실시간 데이터</h1>
+            
+            <!-- 검색 영역 -->
+            <div class="flex gap-4 max-w-2xl mx-auto mb-4">
+                <input 
+                    id="stockCode" 
+                    type="text" 
+                    placeholder="종목코드 입력 (예: 005930)"
+                    class="flex-1 px-4 py-2 border rounded-lg"
+                    value="005930"
+                >
+                <button 
+                    onclick="searchStock()" 
+                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                    검색
+                </button>
+            </div>
+            
+            <!-- 인기 종목 버튼 -->
+            <div class="flex justify-center gap-2">
+                <button onclick="quickSearch('005930')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded">삼성전자</button>
+                <button onclick="quickSearch('000660')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded">SK하이닉스</button>
+                <button onclick="quickSearch('035420')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded">NAVER</button>
+                <button onclick="quickSearch('035720')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded">카카오</button>
+            </div>
+        </div>
+
+        <!-- 로딩 표시 -->
+        <div id="loading" class="hidden bg-white rounded-lg p-8 text-center">
+            <p>데이터를 불러오는 중...</p>
+        </div>
+
+        <!-- 주식 정보 표시 영역 -->
+        <div id="stockInfo" class="hidden bg-white rounded-lg shadow-lg p-6">
+            <h2 id="stockName" class="text-xl font-bold mb-4"></h2>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded">
+                    <p class="text-sm text-gray-600">현재가</p>
+                    <p id="currentPrice" class="text-xl font-bold"></p>
+                </div>
+                <div class="bg-green-50 p-4 rounded">
+                    <p class="text-sm text-gray-600">전일대비</p>
+                    <p id="priceChange" class="text-xl font-bold"></p>
+                </div>
+                <div class="bg-purple-50 p-4 rounded">
+                    <p class="text-sm text-gray-600">거래량</p>
+                    <p id="volume" class="text-xl font-bold"></p>
+                </div>
+                <div class="bg-orange-50 p-4 rounded">
+                    <p class="text-sm text-gray-600">거래대금</p>
+                    <p id="tradingValue" class="text-xl font-bold"></p>
+                </div>
+            </div>
+
+            <!-- 차트 영역 -->
+            <div id="chartContainer" style="height: 400px;" class="bg-gray-50 rounded p-4"></div>
+        </div>
+    </div>
+
+    <script>
+        // API 기본 URL (Vercel 배포 후 자동 설정)
+        const API_BASE = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3000/api' 
+            : '/api';
+
+        let chart = null;
+
+        // 빠른 검색
+        function quickSearch(code) {
+            document.getElementById('stockCode').value = code;
+            searchStock();
+        }
+
+        // 주식 검색
+        async function searchStock() {
+            const stockCode = document.getElementById('stockCode').value;
+            if (!stockCode) {
+                alert('종목코드를 입력하세요');
+                return;
+            }
+
+            // 로딩 표시
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('stockInfo').classList.add('hidden');
+
+            try {
+                // Yahoo Finance API 호출 (한국 주식)
+                const response = await fetch(`${API_BASE}/stock?code=${stockCode}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // 데이터 표시
+                displayStockData(data);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('데이터를 불러올 수 없습니다.');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        // 주식 데이터 표시
+        function displayStockData(data) {
+            document.getElementById('stockInfo').classList.remove('hidden');
+            
+            // 기본 정보
+            document.getElementById('stockName').textContent = `${data.name} (${data.symbol})`;
+            document.getElementById('currentPrice').textContent = `₩${data.price.toLocaleString()}`;
+            
+            // 변동률 색상
+            const changeColor = data.change >= 0 ? 'text-red-600' : 'text-blue-600';
+            const arrow = data.change >= 0 ? '▲' : '▼';
+            document.getElementById('priceChange').innerHTML = 
+                `<span class="${changeColor}">${arrow} ${Math.abs(data.change).toLocaleString()} (${data.changePercent}%)</span>`;
+            
+            document.getElementById('volume').textContent = data.volume.toLocaleString();
+            document.getElementById('tradingValue').textContent = `${(data.tradingValue / 100000000).toFixed(0)}억`;
+
+            // 차트 그리기
+            drawChart(data.chartData);
+        }
+
+        // 차트 그리기
+        function drawChart(chartData) {
+            const container = document.getElementById('chartContainer');
+            
+            // 기존 차트 제거
+            if (chart) {
+                chart.remove();
+                chart = null;
+            }
+
+            // 새 차트 생성
+            chart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: 380,
+                layout: {
+                    backgroundColor: '#f9fafb',
+                    textColor: '#333',
+                },
+                grid: {
+                    vertLines: { color: '#e5e7eb' },
+                    horzLines: { color: '#e5e7eb' },
+                }
+            });
+
+            // 캔들스틱 시리즈 추가
+            const candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#ef4444',      // 상승: 빨강
+                downColor: '#3b82f6',    // 하락: 파랑
+                borderUpColor: '#ef4444',
+                borderDownColor: '#3b82f6',
+                wickUpColor: '#ef4444',
+                wickDownColor: '#3b82f6',
+            });
+
+            // 데이터 설정
+            candlestickSeries.setData(chartData);
+            chart.timeScale().fitContent();
+        }
+
+        // 페이지 로드 시 자동 검색
+        window.addEventListener('DOMContentLoaded', () => {
+            searchStock();
+        });
+    </script>
+</body>
+</html>
